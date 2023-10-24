@@ -1,0 +1,13 @@
+az login -u user-xxx@xxx.onmicrosoft.com -p XYZ 
+
+{
+export TF_VAR_resource_group_name=`az group list --query "[0].name" --output tsv`
+export TF_VAR_location=eastus
+export TF_VAR_subnet_id=`az network vnet subnet list --resource-group $TF_VAR_resource_group_name --vnet-name lab-vnet --query "[0].id" --output tsv`
+echo resource_group_name: $TF_VAR_resource_group_name
+echo location: $TF_VAR_location
+echo subnet_id: $TF_VAR_subnet_id
+}
+
+set | grep TF_VAR
+
