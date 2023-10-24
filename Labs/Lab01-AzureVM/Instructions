@@ -18,3 +18,158 @@ terraform validate
 
 terraform apply -auto-approve
 ##################################################################################################################################################################################
+Ansible 
+
+python3.9 -m pip install --user ansible==6.5.0
+
+ansible --version
+
+{
+mkdir -p ansible/nginx
+cd ansible
+}
+
+cat > hosts << EOF
+[azurevms]
+# host ips
+HOST_IPS
+
+[azurevms:vars]
+ansible_user=superadmin
+ansible_password=s3cr3tP@55word
+ansible_connection=ssh
+ansible_port=22
+EOF
+
+cat > ansible.cfg << EOF
+[defaults]
+log_path = /home/project/ansible.log
+host_key_checking = false
+EOF
+
+{
+#need to be in the terraform workspace dir
+pushd /home/project
+VM_DNS=`terraform output -raw vm_dns`
+echo $VM_DNS
+popd
+}
+
+
+##################################################################################################################################################################################
+Ansible Playbook
+
+cat > playbook.web.yaml << EOF
+---
+- hosts: azurevms
+  gather_facts: no
+  become: yes
+  vars:
+    server_name: "$VM_DNS"
+    document_root: /var/www
+    app_root: website
+  tasks:
+    - name: Update apt cache and install Nginx
+      apt:
+        name: nginx
+        state: latest
+        update_cache: yes
+
+    - name: Copy website files to the server's document root
+      copy:
+        src: "{{ app_root }}"
+        dest: "{{ document_root }}"
+        mode: preserve
+
+    - name: Apply Nginx template
+      template:
+        src: nginx/nginx.conf
+        dest: /etc/nginx/sites-available/default
+      notify: Restart Nginx
+
+    - name: Enable new site
+      file:
+        src: /etc/nginx/sites-available/default
+        dest: /etc/nginx/sites-enabled/default
+        state: link
+      notify: Restart Nginx
+
+    - name: Allow all access to tcp port 80
+      ufw:
+        rule: allow
+        port: '80'
+        proto: tcp
+
+  handlers:
+    - name: Restart Nginx
+      service:
+        name: nginx
+        state: restarted
+EOF
+
+
+head -n10 playbook.web.yaml
+
+cat > ./nginx/nginx.conf << 'EOF'
+server {
+  listen 80;
+
+  server_name {{ server_name }};
+
+  root {{ document_root }}/{{ app_root }};
+  index index.html index.htm;
+
+  location / {
+  default_type "text/html";
+  try_files $uri.html $uri $uri/ =404;
+  }
+}
+EOF
+
+{
+mkdir website && cd website
+git clone https://github.com/cloudacademy/static-website-example.git .
+sed -i "s/Dimension/Built with Terraform + Ansible/g" index.html
+rm -rf {.git,*.MD}
+cd ..
+}
+
+tree
+
+
+##################################################################################################################################################################################
+cd /home/project
+ls -la
+
+cat > ansible.tf << 'EOF'
+# WEB SERVER ANSIBLE SCRIPT
+#============================
+
+resource "null_resource" "ansible" {
+  triggers = {
+    vm_machine_ids = azurerm_linux_virtual_machine.cloud4life_web_vm.virtual_machine_id
+  }
+
+  provisioner "local-exec" {
+    interpreter = ["/bin/bash", "-c"]
+    working_dir = "${path.module}/ansible"
+    command     = <<EOT
+      sed 's/HOST_IPS/${azurerm_linux_virtual_machine.cloud4life_web_vm.private_ip_address}/g' hosts > vms
+      ansible-playbook \
+        -v -i vms playbook.web.yaml \
+        --ssh-common-args='-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null'
+    EOT
+  }
+
+  depends_on = [
+    azurerm_linux_virtual_machine.cloud4life_web_vm
+  ]
+}
+EOF
+
+terraform validate
+
+terraform apply -auto-approve
+
+##################################################################################################################################################################################
+
