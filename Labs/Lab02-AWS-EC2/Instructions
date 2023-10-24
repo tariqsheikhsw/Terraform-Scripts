@@ -115,6 +115,60 @@ resource "aws_security_group" "web_sg" {
 }
 EOF
 
+terraform apply
+
+sed -i '/.*aws_instance.*/,$d' main.tf
+
+cat >> main.tf <<'EOF'
+resource "aws_instance" "web" {
+  count                  = "${var.instance_count}"
+  # lookup returns a map value for a given key
+  ami                    = "${lookup(var.ami_ids, "us-west-2")}"
+  instance_type          = "t2.micro"
+  # Use the subnet ids as an array and evenly distribute instances
+  subnet_id              = "${element(aws_subnet.web_subnet.*.id, count.index % length(aws_subnet.web_subnet.*.id))}"
+  
+  # Use instance user_data to serve the custom website
+  user_data              = "${file("user_data.sh")}"
+  
+  # Attach the web server security group
+  vpc_security_group_ids = ["${aws_security_group.web_sg.id}"]
+  tags { 
+    Name = "Web Server ${count.index + 1}" 
+  }
+}
+EOF
+
+terraform apply
+
+cat > load_balancer.tf <<'EOF'
+resource "aws_elb" "web" {
+  name = "web-elb"
+  subnets = ["${aws_subnet.public_subnet.*.id}"]
+  security_groups = ["${aws_security_group.elb_sg.id}"]
+  instances = ["${aws_instance.web.*.id}"]
+
+  # Listen for HTTP requests and distribute them to the instances
+  listener { 
+    instance_port     = 80
+    instance_protocol = "http"
+    lb_port           = 80
+    lb_protocol       = "http"
+  }
+
+  # Check instance health every 10 seconds
+  health_check {
+    healthy_threshold = 2
+    unhealthy_threshold = 2
+    timeout = 3
+    target = "HTTP:80/"
+    interval = 10
+  }
+}
+
+EOF
+
+
 
 
 Points:
