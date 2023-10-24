@@ -33,4 +33,7 @@ END
 EOF
 
 
+terraform apply
+
+
 
