@@ -181,8 +181,10 @@ site_address=$(terraform output site_address)
 
 watch curl -s $site_address
 
+terraform destroy -target=aws_security_group.elb_sg
 
 
+terraform destroy
 
 Points:
 1. Use User Data script insted of Ansible module (from within aws) 
