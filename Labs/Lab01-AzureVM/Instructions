@@ -11,3 +11,9 @@ echo subnet_id: $TF_VAR_subnet_id
 
 set | grep TF_VAR
 
+terraform init
+
+terraform validate
+
+terraform apply -auto-approve
+
