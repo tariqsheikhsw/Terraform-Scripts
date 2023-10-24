@@ -177,6 +177,9 @@ EOF
 
 terraform apply
 
+site_address=$(terraform output site_address)
+
+watch curl -s $site_address
 
 
 
