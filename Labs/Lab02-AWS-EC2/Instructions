@@ -168,6 +168,16 @@ resource "aws_elb" "web" {
 
 EOF
 
+cat >> outputs.tf <<'EOF'
+output "site_address" {
+  value = "${aws_elb.web.dns_name}"
+}
+
+EOF
+
+terraform apply
+
+
 
 
 
